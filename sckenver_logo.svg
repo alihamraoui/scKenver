@@ -4,7 +4,7 @@
             <style>
               @media (prefers-color-scheme: dark) {
                 svg {
-                  filter: invert(150%);
+                  filter: invert(50%);
                 }
               }
             </style>
