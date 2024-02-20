@@ -20,5 +20,4 @@ RUN apt-get update \
 
 # install tinytex
 RUN Rscript -e 'tinytex::install_tinytex()'
-RUN Rscript -e "install.packages(c('ggplot2', 'plyr', 'tidyverse','patchwork'))"
-RUN Rscript -e "install.packages(c('ggpubr'))"
+RUN Rscript -e "install.packages(c('ggplot2', 'plyr', 'tidyverse','patchwork', 'ggpubr'))"
