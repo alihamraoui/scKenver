@@ -1,6 +1,13 @@
 #########################
 #### Correlation analysis
 #########################
+output_dir="output/html"
+if [ ! -d "$output_dir" ]; then
+    mkdir -p "$output_dir"
+    echo "Directory $output_dir created."
+else
+    echo "Directory $output_dir already exists."
+fi
 
 file="1-processing"
 sequencing="Spatial"

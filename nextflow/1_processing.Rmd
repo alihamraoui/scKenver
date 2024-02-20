@@ -1,0 +1,219 @@
+---
+params:
+  data_name: "Spatial"
+  protocole: "Spatial"
+  benchmark_dir :  "./"
+title: "Benchmark single cell long-read"
+subtitle: "QC metrics"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+<!-- Automatically computes and prints in the output the running time for any code chunk -->
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"),
+  plot = hook_foldable("plot")
+)
+```
+
+<!-- Set default parameters for all chunks -->
+```{r, setup, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(echo = TRUE, # display code
+                      # display chunk output
+                      message = FALSE,
+                      warning = FALSE,
+                      fold_output = FALSE, # for sessionInfo()
+                      fold_plot = FALSE,
+                      
+                      # figure settings
+                      fig.align = 'center',
+                      fig.width = 20,
+                      fig.height = 15)
+```
+
+The goal of this script is to generate a data object for sample `r params$sample_name`.
+
+* removal of cells based on quality control metrics
+
+```{r sourceables, message=FALSE, warning=FALSE, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(patchwork)
+library(data.table)
+source(paste0(params$benchmark_dir,"/bin/corr-analysis.R"))
+```
+
+## Data
+We used the gene expression matrix to count the number of expressed genes per cell. Expressed gene -> one or more UMIs detected from this gene.
+
+```{r datasets}
+protocole <- params$protocole
+data_name <- params$data_name
+benchmark_dir <- params$benchmark_dir
+
+print(benchmark_dir)
+print(paste0(benchmark_dir,"/bin/corr-analysis.R"))
+load(file = paste0(benchmark_dir,  "/input/data/illumina_data.Rdata"))
+load(file = paste0(benchmark_dir, "/input/data/", data_name, "_data.Rdata"))
+
+Nanopore <- get(data_name)
+Illumina <- Illumina[[protocole]]
+
+```
+
+### Matrices dimension
+
+```{r dim matrix}
+cat("dim CellRanger matrix =", dim(Illumina), "; Total UMI :", sum(Illumina))
+
+for (pipe in names(Nanopore)){
+  cat("\ndim",pipe, "matrix   =", dim(Nanopore[[pipe]]), "; Total UMI :", sum(Nanopore[[pipe]]))
+}
+```
+
+###### Gene expression correlation with illumina
+```{r Correlation per cell}
+whitelist_cells <- gsub("-1$", "", colnames(Illumina))
+colnames(Illumina) <- whitelist_cells
+
+Nanopore.corr <- tibble::data_frame()
+for (pipe in names(Nanopore)){
+  corr <- cor.per.cell(Nanopore[[pipe]], Illumina)
+
+  corr <- data.frame(t(data.frame(corr)))
+  colnames(corr) <- "correlation"
+  corr$BC <- rownames(corr)
+  corr$workflow <- pipe
+  rownames(corr) <- NULL
+  Nanopore.corr <- rbind(Nanopore.corr, corr)
+}
+
+```
+
+## Number of UMI per cell
+```{r UMI}
+umi_per_cell <- list()
+for (i in seq_along(Nanopore)) {
+          df_name <- names(Nanopore)[i]
+          print(df_name)
+          df <- data.frame(colnames(Nanopore[[i]]), colSums(Nanopore[[i]]))
+          colnames(df) <- c("BC", df_name)
+          umi_per_cell [[length(umi_per_cell) + 1]] <- df
+        }
+
+umi_per_cell <- umi_per_cell %>% 
+         purrr::reduce(full_join, by="BC") %>%
+         filter(BC %in% colnames(Nanopore[[1]]))
+```
+
+## Number of UMI per cell
+```{r UMI_Illumina}
+umi_per_cell_illumina <- data.frame(BC = colnames(Illumina),  umi.illumina = colSums(Illumina))
+```
+
+## Number of detected gene per cell
+```{r Gene}
+gene_per_cell <- list()
+for (i in seq_along(Nanopore)) {
+    mtx <- Nanopore[[i]]
+    df_name <- names(Nanopore)[i]
+    mtx[mtx>0] = 1
+    df <- data.frame(colnames(mtx), colSums(mtx))
+    colnames(df) <- c("BC", df_name)
+    gene_per_cell [[length(gene_per_cell) + 1]] <- df
+  }
+
+gene_per_cell <- gene_per_cell %>% 
+           purrr::reduce(full_join, by="BC") %>%
+           filter(BC %in% colnames(Nanopore[[1]]))
+```
+
+```{r}
+mtx <- Illumina
+mtx[mtx>0] = 1
+QC.per.cell.Illumina <- data.frame(BC = colnames(mtx),  gene.illumina = colSums(mtx))
+QC.per.cell.Illumina <- merge(QC.per.cell.Illumina, umi_per_cell_illumina, by="BC")
+rm(umi_per_cell_illumina)
+rm(Illumina)
+rm(mtx)
+```
+
+```{r Merge QC}
+umi_per_cell <- umi_per_cell %>%  pivot_longer(cols = names(umi_per_cell)[2]:last(names(umi_per_cell)),
+                                              names_to = "workflow",
+                                              values_to = "umi")
+
+gene_per_cell <- gene_per_cell %>%  pivot_longer(cols = names(gene_per_cell)[2]:last(names(gene_per_cell)),
+                                              names_to = "workflow",
+                                              values_to = "gene")
+
+Qc.per.cell <- merge(umi_per_cell, gene_per_cell, by=c("BC","workflow"))
+
+Qc.per.cell <- merge(Qc.per.cell, Nanopore.corr, by=c("BC","workflow"))
+
+
+Qc.per.cell <- merge(x = Qc.per.cell, y = QC.per.cell.Illumina, by = "BC", all = TRUE)
+
+Qc.per.cell <- na.omit(Qc.per.cell)
+
+Qc.per.cell$data <- data_name
+rm(QC.per.cell.Illumina)
+```
+
+```{r Total UMI}
+total_UMI <- sapply(Nanopore, sum)
+total_UMI <- data.frame(pipe = names(Nanopore),
+                          total_UMI = total_UMI,
+                          data = data_name)
+```
+
+```{r Summary}
+print(summary(Qc.per.cell))
+print(summary(total_UMI))
+```
+
+```{r Save}
+output_dir <- file.path(paste0(benchmark_dir,"/output/"))
+print(output_dir)
+if (!dir.exists(output_dir)){
+dir.create(output_dir)
+} else {
+    print("Dir already exists!")
+}
+saveRDS(Qc.per.cell, file = paste0(output_dir, data_name,"_QC.per.cell.Rdata"))
+saveRDS(total_UMI, file =   paste0(output_dir, data_name,"_total_UMI.Rdata"))
+```
+
+```{r}
+sessionInfo()
+```
