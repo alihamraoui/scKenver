@@ -4,7 +4,7 @@ Single-Cell sequencing methodology comparaison workflow
 ![logo](./sckenver_logo.svg)
 
 
-This repository hosts the scKenver workflow, a term derived from Breton meaning "comparison" or "report". scKenver is designed to aggregate all analyses from my article in a reproducible and automated manner. The purpose of this workflow is to facilitate the replication of results and to ensure maximum transparency in the research process.
+scKenver, a term derived from Breton meaning "comparison" or "report". scKenver is designed to aggregate our benchmark analysis of single cell long read methods in a reproducible and automated manner. The purpose of this workflow is to facilitate the replication of results and to ensure maximum transparency in the research process.
 # Install
 ## Docker image
 
