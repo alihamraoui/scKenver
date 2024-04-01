@@ -12,14 +12,14 @@ This document details the procedures for extracting Barcodes (BC), Unique Molecu
 
 ### Data Extraction
 
-We utilized the `jvarkit` toolkit, specifically its `bioalcidaejdk` component, to parse the BAM files produced by Sicelore. This process enabled us to extract the necessary information, including BC, UMI, and IT, directly from each read.
+We utilized the `jvarkit` toolkit, specifically its `bioalcidaejdk` component, to parse the BAM files produced by Sicelore. This process enabled us to extract the necessary information from `04a.matrices/isobam.bam`, including BC, UMI, and IT, directly from each read.
 [Visit BioAlcidaeJdk documentation](http://lindenb.github.io/jvarkit/BioAlcidaeJdk.html)
 #### Execution Command
 
 ```bash
 PromethION java -jar /path/to/jvarkit/bioalcidaejdk.jar \
                 -e 'stream().forEach(R->println(R.getReadName()+"\t"+R.getAttribute("BC")+"\t"+R.getAttribute("U8")+"\t"+R.getAttribute("IT")));' \
-                /path/to/sicelore/03.umis/passedParsed.bam | sed 's/_/\t/5' | cut -f1,3,4 > read_bc_umi_it_sicelore.txt
+                /path/to/sicelore/04a.matrices/isobam.bam | sed 's/_/\t/5' | cut -f1,3,4 > read_bc_umi_it_sicelore.txt
 ```
 
 *Please adjust `/path/to/jvarkit/` and `/path/to/sicelore/` to your local directories.*
