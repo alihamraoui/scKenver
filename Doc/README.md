@@ -19,7 +19,7 @@ We utilized the `jvarkit` toolkit, specifically its `bioalcidaejdk` component, t
 ```bash
 PromethION java -jar /path/to/jvarkit/bioalcidaejdk.jar \
                 -e 'stream().forEach(R->println(R.getReadName()+"\t"+R.getAttribute("BC")+"\t"+R.getAttribute("U8")+"\t"+R.getAttribute("IT")));' \
-                /path/to/sicelore/04a.matrices/isobam.bam | sed 's/_/\t/5' | cut -f1,3,4 > read_bc_umi_it_sicelore.txt
+                /path/to/sicelore/04a.matrices/isobam.bam | sed 's/_/\t/4'| cut -f1,3,4,5 | grep -v undef > read_bc_umi_trns_sicelore.tsv
 ```
 
 *Please adjust `/path/to/jvarkit/` and `/path/to/sicelore/` to your local directories.*
