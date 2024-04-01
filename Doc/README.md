@@ -10,11 +10,12 @@ This document details the procedures for extracting Barcodes (BC), Unique Molecu
 - Java Runtime Environment (JRE) or Java Development Kit (JDK)
 - Sicelore version 2.1
 
-### Data Extraction
+## Data Extraction and Comparison
 
-We utilized the `jvarkit` toolkit, specifically its `bioalcidaejdk` component, to parse the BAM files produced by Sicelore. This process enabled us to extract the necessary information from `04a.matrices/isobam.bam`, including BC, UMI, and IT, directly from each read.
+### Sicelore
+
+For Sicelore we employ the  `bioalcidaejdk` component of `jvarkit` toolkit, to parse the BAM files produced by Sicelore. This process enabled us to extract the necessary information from `04a.matrices/isobam.bam`, including BC, UMI, and IT, directly from each read.
 [Visit BioAlcidaeJdk documentation](http://lindenb.github.io/jvarkit/BioAlcidaeJdk.html)
-#### Execution Command
 
 ```bash
 PromethION java -jar /path/to/jvarkit/bioalcidaejdk.jar \
@@ -22,13 +23,19 @@ PromethION java -jar /path/to/jvarkit/bioalcidaejdk.jar \
                 /path/to/sicelore/04a.matrices/isobam.bam | sed 's/_/\t/4'| cut -f1,3,4,5 | grep -v undef > read_bc_umi_trns_sicelore.tsv
 ```
 
-*Please adjust `/path/to/jvarkit/` and `/path/to/sicelore/` to your local directories.*
+### FLAMES
 
-This command extracts the read names, BC, UMI, and IT for each entry in the BAM file. The output is processed further with `sed` and `cut` to organize the data, facilitating the subsequent comparison phase.
+For FLAMES, data is extracted from the `realign2transcript.bam` file using the following command:
 
-### Data Comparison
+```bash
+samtools view realign2transcript.bam | sed 's/#/	/1; s/_/	/1'| awk '{print $3 "	" $1 "	" $2 "	" $5}' > read_bc_umi_trns_flames.tsv
+```
 
-Upon extraction, we performed a comprehensive comparison between our dataset and the gold standard. This step was critical for validating the accuracy of the extraction process and ensuring the reliability of the data for downstream analyses.
+This command organizes the extracted data into a TSV file, ready for comparison with the gold standard.
+
+## Comparison with Simulated Gold Standard Data
+
+After data extraction, a thorough comparison with simulated gold standard data is performed for each tool. This crucial step validates the accuracy of the extraction process and ensures the reliability of the data for downstream analyses.
 
 #### Comparison Procedure
 
