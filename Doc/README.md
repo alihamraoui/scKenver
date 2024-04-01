@@ -28,7 +28,7 @@ PromethION java -jar /path/to/jvarkit/bioalcidaejdk.jar \
 For FLAMES, data is extracted from the `realign2transcript.bam` file using the following command:
 
 ```bash
-samtools view realign2transcript.bam | sed 's/#/	/1; s/_/	/1'| awk '{print $3 "	" $1 "	" $2 "	" $5}' > read_bc_umi_trns_flames.tsv
+samtools view realign2transcript.bam | sed 's/#/\t/1; s/_/\t/1'| awk '{print $3 "\t" $1 "\t" $2 "\t" $5}' > read_bc_umi_trns_flames.tsv
 ```
 
 This command organizes the extracted data into a TSV file, ready for comparison with the gold standard.
