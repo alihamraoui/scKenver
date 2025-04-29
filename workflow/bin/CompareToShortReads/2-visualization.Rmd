@@ -1,0 +1,253 @@
+---
+params:
+  files: ""
+title: "NF1 long-read"
+subtitle: "Visualize QC"
+author: "Ali Hamraoui & Audrey Onfroy"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+<!-- Automatically computes and prints in the output the running time for any code chunk -->
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"),
+  plot = hook_foldable("plot")
+)
+```
+
+<!-- Set default parameters for all chunks -->
+```{r, setup, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fold_output = FALSE,
+                      fold_plot = FALSE,
+                      
+                      fig.align = 'center',
+                      fig.width = 15,
+                      fig.height = 8)
+```
+
+The goal of this script is to generate a data object for sample `r params$sample_name`.
+
+* removal of cells based on quality control metrics
+
+```{r libs}
+library(ggpubr)
+source("common_imports.R")
+source("QC.R")
+```
+
+## Data
+We used the gene expression matrix to count the number of expressed genes per cell. Expressed gene -> one or more IMUs detected from this gene.
+
+```{r list_files}
+files_list <- params$files
+files_list <- strsplit(files_list, " ")[[1]]
+files_list
+```
+
+
+```{r data}
+for (dt in c("QC.per.cell", "total_UMI")){
+    li.tmp <- list()
+    idx <- grep(dt, files_list)
+          for (file in files_list[idx]){
+              data_name <- strsplit(file, split ="_")[[1]][1]
+              print(data_name)
+              li.tmp[[data_name]] <- as.data.frame(readRDS(file))
+              }
+    assign(dt, li.tmp)
+}
+
+data.QC <- ldply(QC.per.cell, rbind)
+```
+
+```{r correlation_box}
+box.cor <-  data.QC %>%
+  ggplot(aes(fill=data, y=correlation, x=workflow))+
+    geom_boxplot(position = position_dodge2(preserve = "single"), width = 0.5, outlier.shape = NA) +
+    theme_classic()+
+    labs(x = "", y = "Pearson's correlation", title ="Gene exp correlation with SR" ) +
+    theme(axis.text.x =  element_text(colour = "black"),
+          axis.text = element_text(face="bold"),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())
+```
+
+
+### Number of detected UMI per cell
+
+**Total Number of UMI per cell for common cells for different preprocessing workflows against Cell Ranger on the PromethION dataset. The Pearson correlation coefficient is ploted**
+
+```{r rbind_QC}
+count.per.cell <- do.call(rbind, QC.per.cell)
+```
+
+
+```{r umi_box}
+box.umi <- count.per.cell %>%
+  ggplot(aes(fill=data, y=umi, x=workflow))+
+    ylim(c(0,25000))+
+    geom_boxplot(position = position_dodge2(preserve = "single"), width = 0.5, outlier.shape = NA) +
+    theme_classic()+
+    labs(x = "", y = "UMI count", title ="No. of UMI per cell") +
+    theme(axis.text.x =  element_text(colour = "black"),
+          axis.text = element_text(face="bold"),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())
+```
+
+```{r genes_box}
+box.genes <- count.per.cell %>%
+  ggplot(aes(fill=data, y=gene, x=workflow))+
+    ylim(c(0,5000))+
+    geom_boxplot(position = position_dodge2(preserve = "single"), width = 0.5, outlier.shape = NA) +
+    theme_classic()+
+    labs(x = "", y = "Gene count", title ="No. of genes per cell") +
+    theme(axis.text.x =  element_text(colour = "black"),
+          axis.text = element_text(face="bold"),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())
+```
+
+```{r umi_bar}
+df_UMItotal <- rbind(total_UMI$MinION, total_UMI$PromethION, total_UMI$Spatial, total_UMI$ONT)
+bar.total <-  df_UMItotal %>%
+  ggplot(aes(fill=data, y=total_UMI, x=pipe))+
+    geom_bar(stat="identity", position = position_dodge2(preserve = "single")) +
+    theme_classic()+
+    labs(x = "", y = "", title ="No. total of UMI") +
+    scale_y_continuous(labels = scales::number_format(scale = 1e-6, suffix = "M")) +
+    theme(axis.text.x =  element_text(colour = "black"),
+          axis.text = element_text(face="bold"),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())
+```
+
+```{r viz, fig.height=5, fig.width=15}
+ggarrange(box.umi+coord_flip(), box.genes+coord_flip(), box.cor+coord_flip(), bar.total+coord_flip(), ncol = 4, common.legend =T, legend="bottom")
+```
+
+```{r log_transform }
+count.per.cell$log.umi <- log(count.per.cell$umi)
+count.per.cell$log.gene <- log(count.per.cell$gene)
+
+count.per.cell$log.umi.illumina <- log(count.per.cell$umi.illumina )
+count.per.cell$log.gene.illumina <- log(count.per.cell$gene.illumina)
+```
+
+```{r umi_per_cell, fig.height=6, fig.width=14}
+
+
+scater.upc <- ggscatter(count.per.cell, x = "log.umi.illumina", y = "log.umi", size = 0.2,
+                                                    color = "data") +
+          facet_wrap(~workflow) + 
+          geom_abline(intercept = 0, slope = 1, color = "gray") +
+          stat_cor(aes(color = data, label = after_stat(r.label)), label.y = c(8.7,10,11.3)) +
+          facet_grid("UMI per cell" ~ workflow, scales="free_y") +
+          xlab("") +
+          ylab("Long read") + 
+          scale_fill_brewer(palette = "Dark2")+
+          theme(axis.text.x = element_text(size = 8),
+                axis.text.y = element_text(size = 8),
+                strip.background = element_rect(fill = "transparent"),
+                strip.text.x = element_text(size = 8)
+        )
+
+scater.gpc <- ggscatter(count.per.cell, x = "log.gene.illumina", y = "log.gene", size = 0.2,
+                                                    color = "data") +
+          facet_wrap(~workflow) +
+          geom_abline(intercept = 0, slope = 1, color = "gray") +
+          stat_cor(aes(color = data, label = after_stat(r.label)), label.y = c(8,9,10)) +
+
+          facet_grid( "GENE per cell" ~ workflow, scales="free_y") +
+          xlab("Short read") +
+          ylab("Long read") +
+          theme(axis.text.x = element_text(size = 8),
+                axis.text.y = element_text(size = 8),
+                strip.background = element_rect(fill = "transparent"),
+                strip.text.x = element_blank()
+          )
+
+ggarrange(scater.upc, scater.gpc, nrow=2, common.legend = TRUE)
+```
+
+
+```{r save_pdf}
+pdf(file = "QC.pdf", onefile=FALSE,
+    width = 15, height = 5)
+
+ggarrange(box.umi+coord_flip(), box.genes+coord_flip(), box.cor+coord_flip(), bar.total+coord_flip(), ncol = 4, common.legend =T, legend="bottom")
+dev.off()
+
+pdf(file = "scatters.pdf", onefile=FALSE,
+    width = 14, height = 6)
+
+ggarrange(scater.upc, scater.gpc, nrow=2, common.legend = TRUE)
+
+dev.off()
+```
+
+```{r create_summary_df}
+df_summary <- data.frame()
+for (tool in unique(data.QC$workflow)){
+    
+    cor.umi <- c()
+    cor.gene <- c()
+      for (dt in unique(count.per.cell$data)){
+          df <- count.per.cell[count.per.cell$workflow == tool & count.per.cell$data == dt ,]
+          if (nrow(df) > 50) {
+                  cor.umi <- c(cor.umi, cor(df$umi, df$log.umi.illumina, ))
+                  cor.gene <- c(cor.gene, cor(df$gene, df$log.gene.illumina, ))
+                  }
+        }
+    
+    UMI_per_cell_corr <- median(cor.umi)
+    Gene_per_cell_corr <- median(cor.gene)
+    
+    exp_corr <- median(data.QC[data.QC$workflow == tool, ]$correlation)
+    
+    df <- data.frame(tool=tool, cor.gene=Gene_per_cell_corr, cor.umi=UMI_per_cell_corr, cor.exp=exp_corr)
+    df_summary <- rbind(df, df_summary)
+}
+```
+
+```{r save_summary_df}
+write_csv(df_summary, "short_read_correlation.csv")
+```
+
+```{r session}
+sessionInfo()
+```
+
+

@@ -1,0 +1,229 @@
+---
+params:
+  data: ""
+  nfeatures : 2000
+  min_cells : 3
+  min_features : 300
+  reduction : 'umap'
+  dim : 15
+title: "Benchmark single cell long-read"
+subtitle: "single_cell_metrics"
+author: "Ali Hamraoui & Audrey Onfroy"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+## R functions
+
+This is an R Markdown document.
+
+```{r functions}
+library(ggplot2)
+library(lisi)
+library(patchwork)
+library(Seurat)
+#library(SeuratWrappers)
+library(reticulate)
+options(Seurat.object.assay.version = "v5")
+```
+
+<style>
+body {
+text-align: justify}
+</style>
+
+<!-- Automatically computes and prints in the output the running time for any code chunk -->
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"),
+  plot = hook_foldable("plot")
+)
+```
+
+<!-- Set default parameters for all chunks -->
+```{r, setup, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fold_output = FALSE,
+                      fold_plot = FALSE,
+                      
+                      fig.align = 'center',
+                      fig.width = 20,
+                      fig.height = 15)
+```
+
+The goal of this script is to generate a data object for sample `r params$sample_name`.
+
+* removal of cells based on quality control metrics
+
+```{r sourceables, message=FALSE, warning=FALSE}
+source("common_imports.R")
+source("clustering.R")
+source("cell_annot_custom.R")
+source("clusters_annot.R")
+load("cell_markers.rda")
+load("color_markers.rda")
+```
+
+## Data
+We used the gene expression matrix to count the number of expressed genes per cell. Expressed gene -> one or more UMIs detected from this gene.
+
+```{r datasets}
+data <- readRDS(file = params$data)
+
+Nanopore <- data$LR
+Illumina <- data$SR
+data_name <- data$name
+```
+
+### Matrices dimension
+
+```{r dim matrix}
+cat("dim CellRanger matrix =", dim(Illumina), "; Total UMI :", sum(Illumina))
+
+for (pipe in names(Nanopore)){
+  cat("\ndim",pipe, "matrix   =", dim(Nanopore[[pipe]]), "; Total UMI :", sum(Nanopore[[pipe]]))
+}
+```
+
+```{r Seurat_objects}
+illumina.obj <- Seurat::CreateSeuratObject(Illumina, project = "CellRanger", min.cells = params$min_cells, min.features = params$min_features)
+
+Nanopore.Sobj <- list()
+
+for (pipe in names(Nanopore)){
+  Sobj <- Seurat::CreateSeuratObject(Nanopore[[pipe]], project = pipe, min.cells = params$min_cells, min.features =params$min_features)
+  Nanopore.Sobj[[pipe]] <- Sobj
+}
+```
+
+## Data integration
+
+```{r Integration }
+integrated.Sobj <- list()
+for (pipe in names(Nanopore)){
+  intg.Sobj <- integrate(illumina.obj, Nanopore.Sobj[[pipe]], pipe)
+  integrated.Sobj[[pipe]]  <- intg.Sobj
+}
+```
+
+```{r iLISI}
+df.iLISI <- data_frame()
+reduction <- params$reduction
+
+for (pipe in names(Nanopore)){
+  iLISI <- calc_LISI(integrated.Sobj[[pipe]], reduction)
+
+  iLISI <- (data.frame(iLISI))
+  colnames(iLISI) <- "iLISI"
+  iLISI$workflow <- pipe
+  rownames(iLISI) <- NULL
+  df.iLISI <- rbind(df.iLISI, iLISI)
+}
+```
+
+```{r annotation}
+dim = params$dim
+nfeatures = params$nfeatures
+min.features = params$min_features
+  
+illumina.obj <- annotate.aud(clustering(Illumina,  min.features=min.features, nfeatures=nfeatures, dim=dim))
+
+Nanopore.Sobj <- list()
+for (pipe in names(Nanopore)){
+  Sobj <- annotate.aud(clustering(Nanopore[[pipe]],  min.features=min.features, nfeatures=nfeatures, dim=dim))
+  Nanopore.Sobj[[pipe]] <- Sobj
+}
+```
+
+```{r cLISI}
+df.cLISI <- data_frame()
+reduction <- 'umap'
+
+for (pipe in names(Nanopore)){
+  cLISI <- calc_LISI(Nanopore.Sobj[[pipe]], reduction, "cell_type")
+
+  cLISI <- (data.frame(cLISI))
+  colnames(cLISI) <- "cLISI"
+  cLISI$workflow <- pipe
+  rownames(cLISI) <- NULL
+  df.cLISI <- rbind(df.cLISI, cLISI)
+}
+```
+
+```{r ARI}
+
+df.ARI <- data.frame()
+
+for (pipe in names(Nanopore.Sobj)){
+      ont.obj <- Nanopore.Sobj[[pipe]]
+      
+      illumina.labs <- data.frame(illumina=illumina.obj$cell_type)
+      ont.labs <- data.frame(ont=ont.obj$cell_type)
+      
+      ct.labs <- merge(illumina.labs, ont.labs, by = "row.names", all = F)
+
+      
+      ARI_score <- data.frame(aricode::ARI(ct.labs$illumina, ct.labs$ont))
+      
+      colnames(ARI_score) <- "ARI"
+      ARI_score$workflow <- pipe
+      rownames(ARI_score) <- NULL
+      
+      df.ARI <- rbind(df.ARI, ARI_score)
+}
+```
+
+```{r fig.height=3, fig.width=6}
+bar_metric <- function(df, title, desc=F){
+    ggplot(df, aes(x = forcats::fct_reorder(workflow, ARI, .fun = sum, .desc = desc), y = ARI, fill = workflow)) +
+              geom_bar(stat = "identity") +
+              theme_classic()+
+              labs(x = "", y = "", title=title) +
+              theme(axis.text.x =  element_text(colour = "black"),
+                   axis.text = element_text(face="bold"),
+                   axis.ticks.x = element_blank(),
+                   axis.title.x = element_blank())
+}
+
+bar_metric(df.ARI, 'ARI score') +coord_flip()
+```
+
+
+```{r Save}
+#saveRDS(integrated.Sobj, file = paste0(data_name,"_integrated.Sobj.Rdata"))
+#saveRDS(illumina.obj, file = paste0(data_name,"_illumina.Sobj.Rdata"))
+#saveRDS(Nanopore.Sobj, file = paste0(data_name,"_nanopore.Sobj.Rdata"))
+saveRDS(df.iLISI, file = paste0(data_name,"_iLISI.Rdata"))
+saveRDS(df.cLISI, file = paste0(data_name,"_cLISI.Rdata"))
+saveRDS(df.ARI, file = paste0(data_name,"_ARI.Rdata"))
+```
+
+```{r}
+sessionInfo()
+```
+
