@@ -1,0 +1,167 @@
+---
+params:
+  files: ""
+title: "Benchmark single cell long-read"
+subtitle: "Isoform discovery metrics visualization"
+author: "Ali Hamraoui & Audrey Onfroy"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: hide
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<!-- Automatically computes and prints in the output the running time for any code chunk -->
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"),
+  plot = hook_foldable("plot")
+)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r functions}
+library(dplyr)
+library(ggplot2)
+
+parse_gffcompare_stats <- function(file_path){
+  
+    lines <- readLines(file_path)
+  
+    lines <- lines[!grepl("^#", lines)]
+    
+    data_lines <- lines[2:7]
+    
+    data <- do.call(rbind, lapply(data_lines, function(line) {
+                    parts <- unlist(strsplit(line, "[:|]"))
+                    return(parts)
+                  }))
+    
+    results <- data.frame(
+                    Metric = data[, 1],
+                    Sensitivity = as.numeric(data[, 2]),
+                    Precision = as.numeric(data[, 3])
+    )
+    return(results)
+}
+
+```
+
+## Data
+
+```{r files_list}
+files_list <- params$files
+files_list <- strsplit(files_list, " ")[[1]]
+files_list
+```
+
+```{r}
+#patterns <- paste0(".stats")
+#gff_compar_res <- "/Users/hamraoui/gna2/rstudio-homes/hamraoui/scKenever/scKenver/3-Isoform_descovery/results/"
+
+#files_list <- unlist(lapply(patterns, function(pattern) {
+#  list.files(path = gff_compar_res, recursive = T, pattern = pattern, full.names = TRUE)
+#}))
+#files_list
+```
+
+```{r read_data}
+data.stats <- list()
+
+for (file_name in files_list){
+  
+      tool <- strsplit(file_name, split ="_")[[1]][1]
+      
+      stats <- parse_gffcompare_stats(file_name)
+      
+      stats$tool <- tool
+      
+      data.stats[[tool]] <- stats
+      
+      rm(stats)
+      rm(file_name)
+}
+```
+
+```{r rbind}
+df <- do.call(rbind, lapply(data.stats, function(x){x}))
+df$Metric <- trimws(df$Metric)
+```
+
+```{r f1_score}
+df <- df %>%
+      dplyr::mutate('F1 score' = 2 * (df$Precision * df$Sensitivity) / (df$Precision + df$Sensitivity))
+```
+
+```{r pivot_longer}
+df <- df %>% 
+  tidyr::pivot_longer(
+    cols = c("Sensitivity", "Precision", "F1 score"), 
+    names_to = "accuracy", 
+    values_to = "value",
+    values_drop_na = TRUE
+  ) %>% dplyr::filter(Metric == "Transcript level")
+```
+
+```{r plot}
+p1 <- ggplot(df, aes(x=tool, y=value, fill= tool)) + 
+  geom_bar(stat = "identity", width = .8) +
+  facet_wrap(. ~accuracy, ncol = 1) +
+    theme(
+    legend.position="none",
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(size = 16, face = "bold")
+  ) +
+        labs(title="Simulated data",
+        x ="", y = "")
+```
+
+```{r fig, fig.height=7.5, fig.width=2.5}
+p1
+```
+
+```{r save, fig.height=8, fig.width=6, paged.print=FALSE}
+pdf(file = "isoforms_discovery.pdf", 
+    width = 4.5, 
+    height = 7.5)
+p1
+dev.off()
+```
+
+```{r create_summary_df}
+
+df_summary <- df %>%
+                    dplyr::rename(metrics = Metric, val=value) %>%
+                    filter(accuracy == 'F1 score') %>% 
+                    mutate(metrics="Transcript Discovery")
+df_summary
+```
+
+```{r save_summary_df}
+write.csv(df_summary, paste0("isoforms_discovery.csv"), row.names = F)
+```
+

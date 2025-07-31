@@ -1,0 +1,165 @@
+---
+params:
+  data: '/home/rstudio/markdowns/pip/PCR_data_R10/output/data_pcr_R10.rds' #'../PCR_data/output/data_pcr.rds'
+  size: 500
+  out: ''
+title: "Transcripts assignement metrics"
+subtitle: "Transcripts assignement metrics"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(foreach)
+library(doParallel)
+library(ggpubr)
+library(future.apply)
+library(patchwork)
+```
+
+```{r functions}
+source("./imports.r")
+```
+
+```{r vars}
+data <- params$data
+
+mcs.li <- list(
+  trns=c("transcriptId", "T8")
+)
+```
+
+```{r load_data}
+data.pcr <- readRDS(data)
+
+data.pcr <-  data.pcr$corrected
+```
+
+```{r compute_accuracy}
+plan(multisession(workers = length(data.pcr)))  
+start.time <- Sys.time()
+
+accuracy_df <- bind_rows(
+  mapply(process_cycle, names(data.pcr), data.pcr, SIMPLIFY = FALSE)
+)
+stopImplicitCluster()
+
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time,2)
+cat("Execution time:", time.taken, "\n")
+```
+
+```{r compute_precision_recall}
+start.time <- Sys.time()
+
+prec.li <- lapply(data.pcr, function(cycle) {
+   lapply(cycle, function(data) {
+
+      true_labels = "transcriptId"
+      predicted_labels = "T8"
+
+      true_labels <- factor(data[,true_labels])
+      predicted_labels <- factor(data[, predicted_labels])
+
+    calculate_prec_recall(true_labels = true_labels, predicted_labels = predicted_labels)
+   })
+    
+})
+
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time,2)
+cat("Execution time:", time.taken, "\n")
+```
+
+```{r compute_F1_score}
+prec_df <- do.call(rbind, list.to.df(prec.li))
+
+prec_df <- prec_df %>% 
+  pivot_longer(
+    cols = c("precision", "recall"), 
+    names_to = "metrics", 
+    values_to = "val",
+    values_drop_na = TRUE
+  )
+
+df_f1 <- prec_df %>%
+  pivot_wider(
+    names_from  = metrics, 
+    values_from = val
+    
+  ) %>%
+  mutate(F1 = 2 * (precision * recall) / (precision + recall)) %>%
+
+  pivot_longer(
+    cols      = c("precision", "recall", "F1"),
+    names_to  = "metrics",
+    values_to = "val"
+  ) %>%
+
+  arrange(tool, cycle, match(metrics, c("precision", "recall", "F1")))
+
+prec_summarise <-  df_f1 %>%
+  dplyr::group_by(tool, metrics) %>%
+  dplyr::summarise(mean = mean(val), sd = sd(val))
+```
+
+```{r plots, fig.height=4, fig.width=8}
+p1 <- ggplot(df_f1[df_f1$tool != "bambu",], aes(x=cycle, y=val, fill= metrics)) + 
+  geom_bar(stat = "identity", position=position_dodge()) +
+  facet_grid(. ~tool) +
+  xlab('Amplification rate') + 
+  ylab('') +
+   theme(legend.position = "top")
+
+p2 <- ggplot(prec_summarise[prec_summarise$tool != "bambu",], aes(x=tool, y=mean, fill=metrics)) + 
+  geom_bar(stat="identity", position=position_dodge(width=0.7), width=0.7) +
+  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=0.1, position=position_dodge(width=0.7)) +
+  xlab('') + ylab('') +  
+  theme(legend.position = "top") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+p1 | p2
+```
+
+```{r}
+pdf(file = "transcript_assignement.pdf", 
+    width = 8, 
+    height = 4)
+p1 | p2
+dev.off()
+```
+
+```{r create_summary_df}
+prec_summarise_clean <- prec_summarise %>%
+        dplyr::rename("val" = mean) %>%
+        dplyr::select(-sd)
+```
+
+```{r save_summary_df}
+write.csv(prec_summarise_clean, paste0("transcript_assignement.csv"), row.names = F)
+```
+
+```{r}
+sessionInfo()
+```
+

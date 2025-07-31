@@ -1,0 +1,4 @@
+"metrics","tool","accuracy","val"
+"Transcript Discovery","sockeye","F1 score",45.767066521265
+"Transcript Discovery","bambu","F1 score",73.3748127978216
+"Transcript Discovery","flames","F1 score",9.78219895287958

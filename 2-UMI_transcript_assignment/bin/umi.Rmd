@@ -1,0 +1,337 @@
+---
+params:
+  data: '../test_data/output/data.rds'
+  out: 'test'
+  size: 50000
+title: "BC & UMI correction metrics"
+subtitle: "BC & UMI correction metrics"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(foreach)
+library(doParallel)
+library(ggpubr)
+library(future.apply)
+library(patchwork)
+```
+
+```{r functions}
+source("./imports.r")
+
+prec_recall_fn <- function(true_umi, corrected_umi) {
+
+  TP <- sum(true_umi == corrected_umi, na.rm = TRUE)
+
+  n_pred <- sum(!is.na(corrected_umi))
+  precision <- TP / n_pred
+
+  n_true <- sum(!is.na(true_umi))
+  recall <- TP / n_true
+
+  return(list(precision = precision, recall = recall))
+}
+
+list.to.df <- function(prec.li){
+  df_list <- list()
+  for (cycle_name in names(prec.li)) {
+    cycle_data <- prec.li[[cycle_name]]
+    
+    temp_df <- do.call(rbind, lapply(cycle_data, function(x) {
+      data.frame(precision = x$precision, recall = x$recall)
+    }))
+
+    temp_df$tool <- rownames(temp_df)
+    temp_df$cycle <- cycle_name
+    df_list[[cycle_name]] <- temp_df}
+  return(df_list)
+}
+```
+
+```{r vars}
+data <- params$data
+
+mcs.li <- list(
+  BC=c("BC", "B8"),
+  UMI=c("UMI", "U8")
+)
+```
+
+```{r load_data}
+data.pcr <- readRDS(data)
+```
+
+```{r use_corrected_data}
+corrected.data <- data.pcr$corrected
+```
+
+```{r calc_accuracy}
+plan(multisession(workers = length(data.pcr)))  
+start.time <- Sys.time()
+
+accuracy_df <- bind_rows(
+  mapply(process_cycle, names(corrected.data), corrected.data, SIMPLIFY = FALSE)
+)
+stopImplicitCluster()
+
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time,2)
+cat("Execution time:", time.taken, "\n")
+```
+
+```{r fig.height=4, fig.width=6}
+prec_summarise <-  accuracy_df %>%
+  dplyr::group_by(tool, accuracy) %>%
+  dplyr::summarise(mean = mean(val), sd = sd(val))
+
+p1 <- ggplot(prec_summarise, aes(x=tool, y=mean, fill=accuracy)) + 
+  geom_bar(stat="identity", position=position_dodge(width=0.7), width=0.7) +
+  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=0.1, position=position_dodge(width=0.7))
+p1
+```
+
+```{r save_bc_fig}
+pdf(file = "BC_assignement.pdf", 
+    width = 4, 
+    height = 3)
+p1
+dev.off()
+```
+
+```{r add_raw_data}
+data.merged <- data.pcr$corrected
+for (cycle in names(data.pcr$raw)){
+  for(df in names(data.pcr$raw[[cycle]])){
+    data.merged[[cycle]][[paste0(df, '_raw')]] <- data.pcr$raw[[cycle]][[df]]
+  }
+}
+```
+
+```{r use_merged_data}
+corrected.data <- data.merged
+```
+
+## Precesion and recall on UMI
+
+```{r compute_precision_recall}
+start.time <- Sys.time()
+
+prec.umi.li <- lapply(corrected.data, function(cycle) {
+  
+  lapply(cycle, function(data) {
+    
+      size = params$size
+      
+      if (nrow(data)>size){
+        data <- data[sample(nrow(data), size),]
+      }
+
+      true_labels = "UMI"
+      predicted_labels = "U8"
+
+      true_labels <- data[, true_labels]
+      predicted_labels <- data[, predicted_labels]
+      
+    prec_recall_fn(true_labels, predicted_labels)
+  })
+})
+
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time, 2)
+cat("Execution time:", time.taken, "\n")
+```
+
+```{r compute_F1_score}
+prec_umi_df <- do.call(rbind, list.to.df(prec.umi.li))
+
+prec_umi_df <- prec_umi_df %>% 
+  pivot_longer(
+    cols = c("precision", "recall"), 
+    names_to = "metrics", 
+    values_to = "val",
+    values_drop_na = TRUE
+  )
+
+
+df_f1 <- prec_umi_df %>%
+  pivot_wider(
+    names_from  = metrics, 
+    values_from = val
+    
+  ) %>%
+  dplyr::mutate(F1 = 2 * (precision * recall) / (precision + recall)) %>%
+
+  pivot_longer(
+    cols      = c("precision", "recall", "F1"),
+    names_to  = "metrics",
+    values_to = "val"
+  ) %>%
+
+  arrange(tool, cycle, match(metrics, c("precision", "recall", "F1")))
+
+
+prec_summarise <-  df_f1 %>%
+  dplyr::group_by(tool, metrics) %>%
+  dplyr::summarise(mean = mean(val), sd = sd(val))
+```
+
+```{r plot_pre_rec_umi, fig.height=4, fig.width=17}
+p1 <- ggplot(df_f1, aes(x=cycle, y=val, fill= metrics)) + 
+  geom_bar(stat = "identity", position=position_dodge()) +
+  facet_grid(. ~tool) +
+  xlab('Amplification rate') + ylab('')
+
+p2 <- ggplot(prec_summarise, aes(x=tool, y=mean, fill=metrics)) + 
+  geom_bar(stat="identity", position=position_dodge(width=0.7), width=0.7) +
+  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=0.1, position=position_dodge(width=0.7)) +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  xlab('') + ylab('')
+
+p1 | p2
+```
+
+## AUC CURVE
+
+### Compute ARI
+```{r}
+start.time <- Sys.time()
+
+calc_ARI <- function(df, cycle){
+  ARI_score <- aricode::ARI(df$UMI, df$U8)
+}
+
+ari.li <- lapply(data.merged, function(cycle) {
+  return(Map(calc_ARI, cycle, names(cycle)))
+})
+
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time,2)
+cat("Execution time:", time.taken, "\n")
+```
+
+```{r}
+ari.df <- do.call(rbind.data.frame, ari.li)
+ari.pv <- data.frame()
+for(r in rownames(ari.df)){
+  tmp.df <- data.frame(cycle=r, 
+                       tool=colnames(ari.df),
+                       val=as.numeric(ari.df[r,]),
+                       metrics="ARI")
+  ari.pv <- rbind(ari.pv, tmp.df)
+}
+```
+
+### Merge ARI with F1 score dataframe
+```{r}
+complete_metrics_df <- rbind(df_f1, ari.pv)
+```
+
+### Visualization
+```{r}
+complete_summarise <-  complete_metrics_df %>%
+  dplyr::group_by(tool, metrics) %>%
+  dplyr::summarise(mean = mean(val), sd = sd(val))
+
+complete_summarise <- complete_summarise[!complete_summarise$metrics %in% c("precision", "recall"),]
+
+df_complete_wide <- pivot_wider(
+  complete_summarise,
+  names_from = metrics,  
+  values_from = c(mean, sd)  
+)
+```
+
+```{r}
+df_complete <- df_complete_wide %>%
+  dplyr::mutate(
+    state = if_else(endsWith(tool, "_raw"), "raw", "corrected"),
+    tool = if_else(endsWith(tool, "_raw"), sub("_raw$", "", tool), tool)
+  )
+```
+
+```{r fig.height=4, fig.width=12}
+p1 <- ggplot(complete_summarise, aes(x=tool, y=mean, fill=metrics)) + 
+      
+      geom_bar(stat="identity", position=position_dodge(width=0.7), width=0.7) +
+      geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=0.1, position=position_dodge(width=0.7)) +
+      theme_bw()+ 
+      theme(axis.text.x = element_text(angle = 90))+
+      xlab('') + ylab('')
+
+
+
+p2 <- ggplot(df_complete, aes(x = mean_F1, y = mean_ARI, color = as.factor(tool), shape = state)) +
+            geom_point(size = 3) + 
+            geom_errorbar(aes(ymin = mean_ARI - sd_ARI, ymax = mean_ARI + sd_ARI), width = 0) +
+            geom_errorbarh(aes(xmin = mean_F1 - sd_F1, xmax = mean_F1 + sd_F1), height = 0) +
+            labs(color = "Method", shape = "State") +
+            xlab('F1 score') + ylab('ARI') + 
+            theme_bw() +
+            #scale_color_manual(values = tool_colors,
+            #                   labels = c("Sockeye" = "wf-single-cell",
+            #                    "Sicelore" = "Sicelore 2.1")) + 
+            theme(legend.title = element_blank(),
+                  legend.key.size = unit(0.9, "cm"),
+                  legend.text = element_text(size = 10),
+                  axis.text = element_text(size = 14),
+                  aspect.ratio = 1)
+p1 | p2
+```
+
+```{r}
+pdf(file = paste0("UMI_deduplication.pdf"),
+    width = 12,
+    height = 4)
+ p1 | p2
+ dev.off()
+```
+
+```{r create_summary_df}
+df_summary <- data.frame()
+for (tool in unique(df_complete$tool)){
+    
+    if (tool != "bambu"){
+      mean_correct <- rowMeans(df_complete[df_complete$tool == tool & df_complete$state == "corrected", c("mean_ARI", "mean_F1")]) 
+    }
+      mean_raw <- rowMeans(df_complete[df_complete$tool == tool & df_complete$state == "raw", c("mean_ARI", "mean_F1")])
+    
+    if (tool != "bambu"){
+      df <- data.frame(tool=tool, mean_raw=mean_raw, mean_correct=mean_correct) 
+    }else{
+      df <- data.frame(tool=tool, mean_raw=mean_raw, mean_correct=NA)
+    }
+      
+    df_summary <- rbind(df, df_summary)
+}
+```
+
+```{r save_summary_df}
+write.csv(df_summary, paste0("UMI_deduplication.csv"), row.names = F)
+```
+
+```{r}
+sessionInfo()
+```
+

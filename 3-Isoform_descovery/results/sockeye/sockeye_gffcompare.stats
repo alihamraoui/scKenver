@@ -1,0 +1,30 @@
+# gffcompare v0.12.9 | Command line was:
+#gffcompare -R -r true_positives.gtf -o sockeye_gffcompare novel.gtf
+#
+
+#= Summary for dataset: novel.gtf 
+#     Query mRNAs :     221 in     217 loci  (134 multi-exon transcripts)
+#            (4 multi-transcript loci, ~1.0 transcripts per locus)
+# Reference mRNAs :     203 in     191 loci  (164 multi-exon)
+# Super-loci w/ reference transcripts:      191
+#-----------------| Sensitivity | Precision  |
+        Base level:    72.6     |    96.7    |
+        Exon level:    59.9     |    79.0    |
+      Intron level:    68.1     |    97.9    |
+Intron chain level:    59.1     |    72.4    |
+  Transcript level:    47.8     |    43.9    |
+       Locus level:    50.3     |    44.2    |
+
+     Matching intron chains:      97
+       Matching transcripts:      97
+              Matching loci:      96
+
+          Missed exons:     326/1239	( 26.3%)
+           Novel exons:      34/939	(  3.6%)
+        Missed introns:     325/1033	( 31.5%)
+         Novel introns:      12/718	(  1.7%)
+           Missed loci:       0/191	(  0.0%)
+            Novel loci:      22/217	( 10.1%)
+
+ Total union super-loci across all input datasets: 213 
+221 out of 221 consensus transcripts written in sockeye_gffcompare.annotated.gtf (0 discarded as redundant)

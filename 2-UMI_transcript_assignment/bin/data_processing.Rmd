@@ -1,0 +1,116 @@
+---
+params:
+  output_dir: "../test_data/output"
+  corrected_data: "../test_data/corrected_data"
+  raw_data: "../test_data/raw_data"
+  size: 500
+  sep: '_'
+title: "data processing"
+subtitle: "UMI 7 transcript assignement metrics"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r libraries}
+library(dplyr)
+library(tidyr)
+library(foreach)
+library(doParallel)
+library(ggpubr)
+library(future.apply)
+```
+
+```{r functions}
+source("./imports.r")
+```
+
+```{r params}
+output <- params$output_dir 
+corrected.data <- params$corrected_data
+raw.data <- params$raw_data 
+```
+
+```{r vars}
+if (params$sep == "_"){
+  df_cols <- c("BC", "UMI", "IDX", "transcriptId")
+}else{
+  df_cols <- c("BC", "UMI", "transcriptId", "IDX")
+}
+corrected_cols <- list(B8 = 'V2', U8 = 'V3', T8 = 'V4')
+raw_cols <- list(U8 = 'V2')
+```
+
+```{r load_data}
+if (!file.exists(corrected.data)) {
+  stop("Error: The specified path does not exist. Please check the path.")
+}
+corrected.data <- load_data(corrected.data)
+
+if (!file.exists(raw.data)) {
+  stop("Error: The specified path does not exist. Please check the path.")
+}
+raw.data <- load_data(raw.data)
+```
+
+```{r filter_corrected_data, message=FALSE, warning=FALSE, paged.print=FALSE}
+start.time <- Sys.time()
+
+plan(multisession(workers = length(corrected.data[[2]])))  
+corrected.data <- future_lapply(corrected.data, filter_df,
+                                rename_list = corrected_cols,
+                                df_cols = df_cols,
+                                sep = params$sep,
+                                future.seed = TRUE)
+plan(sequential)
+
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time,2)
+cat("Execution time:", time.taken, "\n")
+```
+
+```{r filter_raw_data, message=FALSE, warning=FALSE, paged.print=FALSE}
+start.time <- Sys.time()
+plan(multisession(workers = length(raw.data[[2]])))
+
+raw.data <- future_lapply(raw.data, filter_raw_df,
+                                rename_list = raw_cols,
+                                df_cols = df_cols,
+                                sep = params$sep,
+                                future.seed = TRUE)
+plan(sequential)
+
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time,2)
+cat("Execution time:", time.taken, "\n")
+```
+
+```{r merge}
+data.pcr <- list(corrected=corrected.data, raw=raw.data)
+```
+
+```{r save_data}
+saveRDS(data.pcr, file = paste0(output, '/data.rds'))
+```
+
+```{r}
+sessionInfo()
+```
+
