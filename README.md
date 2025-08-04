@@ -1,7 +1,7 @@
 # scKeñver
 Single-Cell sequencing methodology comparaison workflow
 
-![logo](./sckenver.svg)
+![logo](./sckenver_logo.svg)
 
 # Benchmarking single‑cell long‑read bioinformatics methods
 [![Made with Docker](https://img.shields.io/badge/Made_with-Docker-blue?logo=docker&logoColor=white)](https://www.docker.com/ "Go to Docker homepage")
