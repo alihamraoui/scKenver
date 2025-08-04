@@ -1,7 +1,7 @@
 # scKeñver
 Single-Cell sequencing methodology comparaison workflow
 
-![logo](./sckenver_logo.svg)
+![logo](./sckenver.svg)
 
 # Benchmarking single‑cell long‑read bioinformatics methods
 
