@@ -1,5 +1,5 @@
 # scKeñver
-Single-Cell sequencing methodology comparaison workflow
+scRNA‑seq Long‑Read Methods Benchmark
 
 ![logo](./sckenver_logo.svg)
 
