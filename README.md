@@ -1,7 +1,9 @@
 # scKeñver
-scRNA‑seq Long‑Read Methods Benchmark
 
+<!---
+scRNA‑seq Long‑Read Methods Benchmark
 ![logo](./sckenver_logo.svg)
+-->
 
 # Benchmarking single‑cell long‑read bioinformatics methods
 [![Made with Docker](https://img.shields.io/badge/Made_with-Docker-blue?logo=docker&logoColor=white)](https://www.docker.com/ "Go to Docker homepage")
@@ -9,6 +11,7 @@ scRNA‑seq Long‑Read Methods Benchmark
 ![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 ![Static Badge](https://img.shields.io/badge/BioRxiv%20DOI-10.1101%2F2025.07.21.665920-green?style=flat&logoColor=black&labelColor=black&color=red)
 
+![logo](./workflows.png)
 
 
 # Introduction
