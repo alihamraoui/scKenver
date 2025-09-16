@@ -1,0 +1,226 @@
+---
+title: "Benchmark single cell long-read methods"
+subtitle: "PseudoBulk_Quantification"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+params:
+  data: "../../test_data/4-Quantification/"
+  cell_annotation: "../../test_data/4-Cell_Annotation/cell_barcodes_celltypes.csv"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"), 
+  plot = hook_foldable("plot")
+)
+```
+
+<!-- Set default parameters for all chunks -->
+```{r, setup, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(echo = TRUE, # display code
+                      message = FALSE,
+                      warning = FALSE,
+                      fold_output = FALSE, # for sessionInfo()
+                      fold_plot = FALSE)
+```
+
+```{r sourceables, message=FALSE, warning=FALSE}
+library(fs)
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+library(tibble)
+library(pheatmap)
+source("pseudobulk.R")
+```
+
+```{r vals}
+root_dir <- params$data
+cell_annotation <- params$cell_annotation
+```
+
+```{r load_data}
+all_folders <- sort(list.dirs(root_dir, full.names = TRUE, recursive = FALSE))
+
+data <- lapply(all_folders, function(subdir) {
+          mat <- Seurat::Read10X(data.dir = subdir, gene.column = 1)
+          as.data.frame(as.matrix(mat))
+        })
+
+names(data) <- basename(all_folders)
+
+str(data, max.level = 1)
+```
+
+```{r load_annotation}
+df.annotation <- read.csv(cell_annotation)
+```
+
+```{r dim_matrix}
+cat("dim ground truth matrix =", dim(data$truth), "; Total UMI :", sum(data$truth))
+
+for (pipe in names(data)){
+  cat("\ndim",pipe, "matrix   =", dim(data[[pipe]]), "; Total UMI :", sum(data[[pipe]]))
+}
+```
+
+```{r}
+for (tl in names(data)){
+    rownames(data[[tl]]) <- sub("\\.\\d+$", "", rownames(data[[tl]]))
+}
+```
+
+
+```{r sobjects}
+data.Sobj <- list()
+for (pipe in names(data)){
+  print(pipe)
+  Sobj <- Seurat::CreateSeuratObject(data[[pipe]], project = pipe)
+  data.Sobj[[pipe]] <- Sobj
+}
+```
+
+```{r clustering}
+dim = 10
+nfeatures = 2000
+min.features = 100
+
+data.Sobj <- list()
+for (pipe in names(data)){
+  Sobj <- clustering(data[[pipe]],  min.features=min.features, nfeatures=nfeatures, dim=dim)
+  data.Sobj[[pipe]] <- Sobj
+}
+```
+
+```{r plots}
+plots <- list()
+for (i in names(data.Sobj)) {
+          plots[[i]] <- dim.plot(data.Sobj[[i]], i)
+}
+```
+
+```{r annotaion}
+for (tl in names(data.Sobj)){
+      df_barcodes <- data.frame(
+                      Barcode = colnames(data.Sobj[[tl]]),
+                      stringsAsFactors = FALSE)
+      
+      df_merged <- merge(df_barcodes, df.annotation, by = "Barcode", all.x = TRUE)
+      
+      df_merged <- df_barcodes %>%
+                    left_join(df.annotation, by = "Barcode")
+      
+      data.Sobj[[tl]]$CellType <- df_merged$CellType
+}
+```
+
+```{r fig.height=4.5, fig.width=8}
+plots$truth | DimPlot(data.Sobj$truth, reduction = 'tsne', group.by = 'CellType')+ 
+                ggtitle(paste('Simulated cell types')) +
+                theme(aspect.ratio = 1)
+```
+
+```{r}
+pdf(file = paste0("Cell_types.pdf"), 
+    width = 8, 
+    height = 4.5)
+plots$truth | DimPlot(data.Sobj$truth, reduction = 'tsne', group.by = 'CellType')+ 
+                ggtitle(paste('Cell types')) +
+                theme(aspect.ratio = 1)
+dev.off()
+```
+
+```{r}
+for (tl in setdiff(names(data.Sobj), 'truth')){
+    Idents(data.Sobj[[tl]]) <- data.Sobj[[tl]]$CellType 
+}
+```
+
+#### PSEUDO BULK ANALYSIS
+
+```{r}
+cor_table <- compare_pseudobulk_normalized(seurat_obj1 = data.Sobj$truth,
+                                            seurat_obj2 = data.Sobj$FLAMES,
+                                            celltype_column = "CellType",
+                                            plot = F)
+```
+
+```{r}
+list.cor_table <- list()
+for (tool in setdiff(names(data.Sobj), 'truth')){
+    cor_table <- compare_pseudobulk_normalized(seurat_obj1 = data.Sobj$truth,
+                                            seurat_obj2 = data.Sobj[[tool]],
+                                            celltype_column = "CellType",
+                                            plot = F)
+    list.cor_table[[tool]] <- cor_table 
+}
+```
+
+```{r}
+list.cor_named <- lapply(names(list.cor_table), function(tool) {
+  df <- list.cor_table[[tool]]
+  df <- df %>% dplyr::select(CellType, Correlation) %>%
+    dplyr::rename(!!tool := Correlation)
+  return(df)
+})
+
+merged_df <- purrr::reduce(list.cor_named, full_join, by = "CellType")
+```
+
+```{r}
+heatmap_matrix <- merged_df %>%
+      column_to_rownames(var = "CellType") %>%
+      as.matrix()
+```
+
+```{r fig.height=2.4, fig.width=4}
+hp <- pheatmap(heatmap_matrix,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         display_numbers = T,
+         main = "",
+         color = colorRampPalette(c("#E18727", '#B8B8B8', "#7876B1","#5CB85C"))(100),
+         breaks = seq(0.59, 1, length.out = 100))
+hp
+```
+
+```{r}
+pdf(file = "PseudoBulkMetrics.pdf", 
+    width = 4.5, 
+    height = 2.2)
+hp
+dev.off()
+```
+
+
+```{r}
+sessionInfo()
+```
+
+
+

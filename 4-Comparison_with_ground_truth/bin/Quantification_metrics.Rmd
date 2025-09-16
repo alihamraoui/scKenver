@@ -1,0 +1,239 @@
+---
+title: "Benchmark single cell long-read"
+subtitle: "gene_quantification"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+params:
+  data: "../test_data/4-Quantification/"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+<!-- Automatically computes and prints in the output the running time for any code chunk -->
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"),
+  plot = hook_foldable("plot")
+)
+```
+
+<!-- Set default parameters for all chunks -->
+```{r, setup, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(echo = TRUE, # display code
+                      message = FALSE,
+                      warning = FALSE,
+                      fold_output = FALSE, # for sessionInfo()
+                      fold_plot = FALSE)
+```
+
+```{r sourceables, message=FALSE, warning=FALSE}
+source('imports.R')
+```
+
+```{r vals}
+root_dir <- params$data
+```
+
+```{r load_data}
+all_folders <- sort(list.dirs(root_dir, full.names = TRUE, recursive = FALSE))
+
+data <- lapply(all_folders, function(subdir) {
+          mat <- Seurat::Read10X(data.dir = subdir, gene.column = 1)
+          as.data.frame(as.matrix(mat))
+        })
+
+names(data) <- basename(all_folders)
+
+str(data, max.level = 1)
+```
+
+```{r}
+for (tl in names(data)){
+    rownames(data[[tl]]) <- sub("\\.\\d+$", "", rownames(data[[tl]]))
+    colnames(data[[tl]]) <- sub("\\.\\d+$", "", colnames(data[[tl]]))
+}
+```
+
+```{r counts_df}
+
+df_list <- list()
+
+for(tool in names(data)){
+      
+      df_list[[tool]] <- data.frame(featureId = rownames(data[[tool]]),
+                                        pipe = rowSums(data[[tool]])) %>%
+                            setNames(c("featureId", tool))
+    }
+
+data.counts <- purrr::reduce(df_list, full_join, by = "featureId") %>%
+                filter(if_all(everything(), ~ . > 0)) %>%
+                drop_na() %>%
+                `rownames<-`(.$featureId) %>%
+                dplyr::select(-featureId)
+
+rm(df_list)
+```
+
+```{r tpm}
+total_counts_per_sample<- colSums(data.counts)
+data.tpm <- sweep(data.counts, 2, total_counts_per_sample, FUN = "/") * 1e6
+```
+
+
+```{r summary}
+df.sum <- data.frame()
+
+tools <- names(data.counts)
+for (tool in tools){
+    df <- data.frame(pipe=tool,
+                     sum=as.integer(sum(data.counts[[tool]])))
+    df.sum <- rbind(df.sum, df)
+  } 
+  rm(df)
+
+df.sum
+```
+
+```{r mse}
+df.mse <- data.frame()
+
+tools <- names(data.tpm)
+for (tool in tools[!tools %in% "truth"]){
+  
+mse <- sqrt(mean((data.counts[, tool] - data.counts$truth)^2))
+  
+df <- data.frame(pipe=tool,
+                     mse=mse)
+    df.mse <- rbind(df.mse, df)
+    rm(df)
+    rm(mse)
+}
+```
+
+```{r plot_mse_counts}
+plot.counts <- ggplot(data=df.mse, aes(y=reorder(pipe, -mse), x=mse, fill=pipe)) +
+                    geom_bar(stat = "identity") +
+                    scale_fill_brewer(palette="Dark2") +
+                    theme(legend.position="none")+
+                    theme_classic()
+```
+
+```{r error_df}
+df.error <- data.frame()
+
+for (tool in tools[!tools %in% "truth"]){
+    
+    RelativeErreur <- (data.tpm[, tool] - data.tpm$truth) / data.tpm$truth
+    
+    df <- data.frame(pipe=tool,
+                     RelativeErreur=RelativeErreur)
+    
+    df.error <- rbind(df.error, df)
+    rm(df)
+    rm(RelativeErreur)
+  }
+```
+
+```{r plot_error}
+plot.error <- ggplot(data=df.error, aes(x=pipe, y=RelativeErreur, fill=pipe)) +
+                      geom_boxplot(outlier.shape = NA) + 
+                      geom_hline(yintercept = 0, linetype = "dashed") +
+                      scale_y_continuous(limits = c(-1,1)) +
+                      scale_fill_brewer(palette="Dark2") +
+                      theme_classic()
+```
+
+```{r normalized_mse}
+df.RMSE <- data.frame()
+
+tools <- names(data)
+for (tool in tools[!tools %in% c("truth")]){
+    
+    true.mtx <- as.matrix(data$truth)
+    tool.mtx <- as.matrix(data[[tool]])
+    
+    gene <- intersect(rownames(tool.mtx), 
+                      rownames(true.mtx))
+    cell <-  intersect(colnames(tool.mtx), 
+                       colnames(true.mtx))
+    
+    tool.mtx <- tool.mtx[gene, cell]
+    true.mtx <- true.mtx[gene, cell]
+    
+    mn <- mean(true.mtx, na.rm = TRUE)
+    sd <- sd(true.mtx, na.rm = TRUE)
+
+    tool.mtx <- normalize(tool.mtx, mn, sd)
+    true.mtx <- normalize(true.mtx, mn, sd)
+    
+
+    rmse <- sqrt(mean((true.mtx - tool.mtx)^2))
+
+    df <- data.frame(pipe=tool,
+                     rmse=rmse)
+
+    df.RMSE <- rbind(df.RMSE, df)
+    
+    rm(df)
+    rm(rmse)
+    rm(gene)
+    rm(cell)
+    rm(true.mtx)
+  rm(tool.mtx)
+}
+
+```
+
+```{r plot_mse}
+plot.rmse <- ggplot(data=df.RMSE, aes(y=reorder(pipe, -rmse), x=rmse, fill=pipe)) +
+                    geom_bar(stat = "identity") +
+                    scale_fill_brewer(palette="Dark2") +
+                    theme(legend.position="none")+
+                    theme_classic() +
+                    xlim(0, 1.5)
+```
+
+```{r fig.height=3, fig.width=12}
+plot.counts | plot.error | plot.rmse
+```
+
+```{r}
+pdf(file = paste0("QuantificationMetrics.pdf"), 
+    width = 14, 
+    height = 3)
+plot.counts | plot.error | plot.rmse
+dev.off()
+```
+
+```{r sessioninfo}
+sessionInfo()
+```
+
+

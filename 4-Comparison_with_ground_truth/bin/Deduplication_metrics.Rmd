@@ -1,0 +1,257 @@
+---
+title: "Benchmark single cell long-read"
+subtitle: "Deduplication analysis"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+params:
+  data: "../test_data/4-UMI-dedup/"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+<!-- Automatically computes and prints in the output the running time for any code chunk -->
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"),
+  plot = hook_foldable("plot")
+)
+```
+
+<!-- Set default parameters for all chunks -->
+```{r, setup, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(echo = TRUE, # display code
+                      message = FALSE,
+                      warning = FALSE,
+                      fold_output = FALSE, # for sessionInfo()
+                      fold_plot = FALSE)
+```
+
+```{r sourceables, message=FALSE, warning=FALSE}
+source('imports.R')
+```
+
+```{r vals}
+root_dir <- params$data
+```
+
+```{r load_data}
+all_folders <- sort(list.dirs(root_dir, full.names = TRUE, recursive = FALSE))
+
+data<- lapply(all_folders, function(subdir) {
+  methods <- sort(list.dirs(subdir, full.names = TRUE, recursive = FALSE))
+  mats <- setNames(
+    lapply(methods, function(m) {
+      mat <- Seurat::Read10X(data.dir = m, gene.column = 1)
+      as.data.frame(as.matrix(mat))
+    }),
+    basename(methods)
+  )
+  mats
+})
+
+names(data) <- basename(all_folders)
+
+str(data, max.level = 2)
+```
+
+```{r counts_df}
+data.counts <-  list()
+for (cycle in names(data)){
+  
+    cycle.list <- data[[cycle]]
+    l.name <- names(cycle.list) 
+    
+    df_list <- list()
+    
+    for(df_name in l.name){
+      df_list[[df_name]] <- data.frame(geneId = rownames(cycle.list[[df_name]]),
+                                        pipe = rowSums(cycle.list[[df_name]])) %>%
+                            setNames(c("geneId", df_name))
+    }
+
+    data.counts[[cycle]] <- purrr::reduce(df_list, full_join, by = "geneId") %>%
+              filter(if_all(everything(), ~ . > 0)) %>%
+              drop_na() %>%
+              `rownames<-`(.$geneId) %>%
+              dplyr::select(-geneId)
+    rm(cycle.list)
+    rm(df_list)
+}
+```
+
+```{r tpm}
+data.tpm <- list()
+
+for (cycle in names(data.counts)){
+  total_counts_per_sample<- colSums(data.counts[[cycle]])
+  data.tpm[[cycle]] <- sweep(data.counts[[cycle]], 2, total_counts_per_sample, FUN = "/") * 1e6
+}
+```
+
+
+```{r summary}
+df.sum <- data.frame()
+for (cycle in names(data.counts)){
+  tools <- names(data.counts[[cycle]])
+  for (tool in tools){
+    df <- data.frame(pipe=tool,
+                     sum=as.integer(sum(data.counts[[cycle]][[tool]])),
+                     cycle=cycle)
+    df.sum <- rbind(df.sum, df)
+  } 
+  rm(df)
+}
+df.sum
+```
+
+```{r mse}
+df.mse <- data.frame()
+for (cycle in names(data.tpm)){
+  tools <- names(data.tpm[[cycle]])
+  for (tool in tools[!tools %in% "truth"]){
+    df.counts <- as.data.frame(data.counts[[cycle]])
+    mse <- sqrt(mean((df.counts[, tool] - df.counts$truth)^2))
+  
+    df <- data.frame(pipe=tool,
+                     mse=mse,
+                     cycle=cycle)
+    df.mse <- rbind(df.mse, df)
+    rm(df)
+    rm(mse)
+  }
+}
+```
+
+```{r plot_mse_counts}
+plot.counts <- ggplot(data=df.mse, aes(x=cycle, y=mse, group=pipe))+
+  geom_line(aes(color=pipe))+
+  geom_point(aes(color=pipe))+
+  scale_fill_hue(l=40, c=35) +
+  theme_classic()
+```
+
+```{r error_df}
+df.error <- data.frame()
+
+for (cycle in names(data.tpm)){
+  tools <- names(data.tpm[[cycle]])
+  for (tool in tools[!tools %in% "truth"]){
+    
+    df.tpm <- as.data.frame(data.tpm[[cycle]])
+    
+    RelativeErreur <- (df.tpm[, tool] - df.tpm$truth) / df.tpm$truth
+    
+    df <- data.frame(pipe=tool,
+                     RelativeErreur=RelativeErreur,
+                     cycle=cycle)
+    df.error <- rbind(df.error, df)
+    rm(df)
+    rm(RelativeErreur)
+  }
+}
+```
+
+```{r plot_error}
+plot.error <- ggplot(data=df.error, aes(x=cycle, y=RelativeErreur, fill=pipe)) +
+              geom_boxplot(outlier.shape = NA) + 
+              geom_hline(yintercept = 0, linetype = "dashed") +
+              scale_y_continuous(limits = c(-1,1)) +
+              scale_fill_brewer(palette="Dark2") +
+              theme_classic()
+```
+
+```{r normalized_mse}
+df.RMSE <- data.frame()
+
+for (cycle in names(data)){
+  tools <- names(data[[cycle]])
+  for (tool in tools[!tools %in% c("truth")]){
+    
+    true.mtx <- as.matrix(data[[cycle]]$truth)
+    tool.mtx <- as.matrix(data[[cycle]][[tool]])
+    
+    gene <- intersect(rownames(tool.mtx), 
+                      rownames(true.mtx))
+    cell <-  intersect(colnames(tool.mtx), 
+                       colnames(true.mtx))
+    
+    tool.mtx <- tool.mtx[gene, cell]
+    true.mtx <- true.mtx[gene, cell]
+    
+    mn <- mean(true.mtx, na.rm = TRUE)
+    sd <- sd(true.mtx, na.rm = TRUE)
+
+
+    tool.mtx <- normalize(tool.mtx, mn, sd)
+    true.mtx <- normalize(true.mtx, mn, sd)
+
+    rmse <- sqrt(mean((true.mtx - tool.mtx)^2))
+
+    df <- data.frame(pipe=tool,
+                     rmse=rmse,
+                     cycle=cycle)
+
+    df.RMSE <- rbind(df.RMSE, df)
+    
+    rm(df)
+    rm(rmse)
+    rm(gene)
+    rm(cell)
+    rm(true.mtx)
+  rm(tool.mtx)
+  }
+}
+```
+
+```{r plot_mse}
+plot.rmse <- ggplot(data=df.RMSE, aes(x=cycle, y=rmse, group=pipe))+
+  geom_line(aes(color=pipe))+
+  geom_point(aes(color=pipe))+
+  scale_fill_hue(l=40, c=35) +
+  theme_classic()
+```
+
+```{r fig.height=3, fig.width=14}
+plot.counts | plot.error | plot.rmse
+```
+
+```{r}
+pdf(file = "UMIDeduplicationMetrics.pdf", 
+    width = 14, 
+    height = 3)
+plot.counts | plot.error | plot.rmse
+dev.off()
+```
+
+```{r sessioninfo}
+sessionInfo()
+```
+
+
