@@ -1,0 +1,3 @@
+shortReads,longReads,dataName,dataType
+./test_data/1-Comparaison_with_short_reads/Illumina/spatial,./test_data/1-Comparaison_with_short_reads/Spatial/,MOB,spatial
+./test_data/1-Comparaison_with_short_reads/Illumina/MPNST1,./test_data/1-Comparaison_with_short_reads/MinION/,MinION,singleCell

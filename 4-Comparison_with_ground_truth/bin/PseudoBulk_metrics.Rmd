@@ -217,6 +217,21 @@ hp
 dev.off()
 ```
 
+```{r create_summary_df}
+df_summary <- data.frame(tool=colnames(merged_df[,-1]), cor=colMeans(merged_df[,-1]))
+
+df_summary_clean <- df_summary %>%
+                    group_by(tool) %>%
+                    summarise(metrics = "Pseudobulk counts correlation",
+                              val = max(cor),
+                              .groups = "drop")
+
+df_summary_clean
+```
+
+```{r save_metrics}
+write.csv(df_summary_clean, file = "Pseudobulk_metrics.csv", row.names = F)
+```
 
 ```{r}
 sessionInfo()

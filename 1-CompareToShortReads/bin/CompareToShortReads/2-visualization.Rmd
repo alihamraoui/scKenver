@@ -240,10 +240,18 @@ for (tool in unique(data.QC$workflow)){
     df <- data.frame(tool=tool, cor.gene=Gene_per_cell_corr, cor.umi=UMI_per_cell_corr, cor.exp=exp_corr)
     df_summary <- rbind(df, df_summary)
 }
+
+
+df_summary <- df_summary %>% pivot_longer(!tool, names_to = "metrics", values_to = "val") %>%
+                             dplyr::group_by(tool) %>%
+                             dplyr::summarise(val = mean(val), .groups = "drop") %>%
+                             mutate(metrics = "Correlation to SR")
+                              
+
 ```
 
 ```{r save_summary_df}
-write_csv(df_summary, "short_read_correlation.csv")
+write_csv(df_summary, "correlation_to_SR_metrics.csv")
 ```
 
 ```{r session}

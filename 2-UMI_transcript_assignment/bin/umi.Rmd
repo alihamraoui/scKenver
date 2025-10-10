@@ -1,6 +1,6 @@
 ---
 params:
-  data: '../test_data/output/data.rds'
+  data: '../test_data/data.rds'
   out: 'test'
   size: 50000
 title: "BC & UMI correction metrics"
@@ -312,23 +312,23 @@ pdf(file = paste0("UMI_deduplication.pdf"),
 df_summary <- data.frame()
 for (tool in unique(df_complete$tool)){
     
-    if (tool != "bambu"){
       mean_correct <- rowMeans(df_complete[df_complete$tool == tool & df_complete$state == "corrected", c("mean_ARI", "mean_F1")]) 
-    }
+
       mean_raw <- rowMeans(df_complete[df_complete$tool == tool & df_complete$state == "raw", c("mean_ARI", "mean_F1")])
-    
-    if (tool != "bambu"){
+
       df <- data.frame(tool=tool, mean_raw=mean_raw, mean_correct=mean_correct) 
-    }else{
-      df <- data.frame(tool=tool, mean_raw=mean_raw, mean_correct=NA)
-    }
       
     df_summary <- rbind(df, df_summary)
 }
+
+df_summary <- df_summary %>% pivot_longer(!tool, names_to = "metrics", values_to = "val") %>%
+                mutate(metrics = recode(metrics,
+                               "mean_raw" = "UMI detection",
+                               "mean_correct" = "UMI correction"))
 ```
 
 ```{r save_summary_df}
-write.csv(df_summary, paste0("UMI_deduplication.csv"), row.names = F)
+write.csv(df_summary, paste0("UMI_correction_metrics.csv"), row.names = F)
 ```
 
 ```{r}

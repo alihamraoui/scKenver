@@ -1,0 +1,152 @@
+---
+title: "Benchmark single cell long-read"
+subtitle: "Metrics summary"
+author: "Ali Hamraoui"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+params:
+  metrics_files: "../../test_data/4-UMI-dedup/"
+output:
+  html_document:
+    code_folding: show
+    code_download: true
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+<!-- Automatically computes and prints in the output the running time for any code chunk -->
+```{r, echo=FALSE}
+# https://github.com/rstudio/rmarkdown/issues/1453
+hooks = knitr::knit_hooks$get()
+hook_foldable = function(type) {
+  force(type)
+  function(x, options) {
+    res = hooks[[type]](x, options)
+    
+    if (isFALSE(options[[paste0("fold_", type)]])) return(res)
+    
+    paste0(
+      "<details><summary>", "show", "</summary>\n\n",
+      res,
+      "\n\n</details>"
+    )
+  }
+}
+knitr::knit_hooks$set(
+  output = hook_foldable("output"),
+  plot = hook_foldable("plot")
+)
+```
+
+<!-- Set default parameters for all chunks -->
+```{r, setup, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(echo = TRUE, # display code
+                      message = FALSE,
+                      warning = FALSE,
+                      fold_output = FALSE, # for sessionInfo()
+                      fold_plot = FALSE)
+```
+
+## R Markdown
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+custom_dotplot <- function(df) {
+      #df$evaluation <- factor(df$evaluation, levels = c("CB and UMI identification",
+      #                                                  "Concordance with short-read",
+      #                                                  "Clustering and cell type annotation",
+      #                                                  "Pseudo Bulk",
+      #                                                  "Isoform analysis",
+      #                                                  "Time & memory usage"))
+      
+      #df$tool <- factor(df$tool, levels = rev(tools))
+      
+      ggplot(df, aes(x = metrics, y = tool)) +
+              geom_point(aes(size = Rank, color = val_scaled)) +
+              scale_color_gradient2(low = "#F27900", mid = "gray", high = "#6962A1", midpoint = 0.5) +
+              scale_size(range = c(3, 10)) +
+              #facet_wrap(~ evaluation, scales = "free_x", nrow = 1) +  
+              theme_minimal() +
+              theme( legend.position = "bottom",
+                    axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 12),
+                    axis.text.y = element_text(color = "black", size = 12),
+                    axis.title = element_blank(),
+                    strip.text = element_text(face = "bold", size = 12, color = "black"),
+                    legend.text = element_text(color = "black", size = 12),
+                    legend.title = element_text(color = "black", size = 13)) +
+              labs(size = "Methods rank", color = "Score")
+}
+
+rm_axis <- function(plot){
+          plot <- plot + theme(legend.position="none") +
+                         theme(axis.title.y=element_blank(),
+                             axis.text.y=element_blank(),
+                             axis.ticks.y=element_blank())
+          return(plot)}
+```
+
+```{r}
+files =  params$metrics_files
+print(files)
+```
+
+```{r}
+files <- strsplit(trimws(files), " +")[[1]]
+
+dfs <- lapply(files, read.csv)
+
+df_all <- bind_rows(dfs, .id = "source_file")
+
+head(df_all)
+```
+
+```{r}
+df_all <- df_all %>%
+              group_by(metrics) %>%
+              mutate(
+                Rank = rank(val, ties.method = "min"),
+                val_scaled = (val - min(val)) / (max(val) - min(val))
+              ) %>%
+              ungroup()
+head(df_all)
+```
+
+```{r save_metrics}
+write.csv(df_all, file = "Summary_table.csv", row.names = F)
+```
+
+```{r}
+df_global_score <- df_all %>%
+  group_by(tool) %>%
+  summarise(
+    global_score = mean(val_scaled, na.rm = TRUE)
+  ) %>%
+  arrange(desc(global_score))
+df_global_score
+```
+
+```{r fig.height=6.5, fig.width=16}
+custom_dotplot(df_all)
+```
+
+```{r}
+pdf(file = paste0("MetricsSummary.pdf"), 
+     width = 15, 
+     height = 6.5)
+ custom_dotplot(df_all)
+dev.off()
+```
+
+```{r}
+sessionInfo()
+```
+

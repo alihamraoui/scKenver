@@ -1,10 +1,10 @@
 ---
-title: "Benchmark single cell long-read"
-subtitle: "gene_quantification"
+title: "Benchmark single-cell long-read methods"
+subtitle: "Transcript_quantification"
 author: "Ali Hamraoui"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 params:
-  data: "../test_data/4-Quantification/"
+  data: "../../test_data/4-Quantification/"
 output:
   html_document:
     code_folding: show
@@ -105,7 +105,6 @@ rm(df_list)
 total_counts_per_sample<- colSums(data.counts)
 data.tpm <- sweep(data.counts, 2, total_counts_per_sample, FUN = "/") * 1e6
 ```
-
 
 ```{r summary}
 df.sum <- data.frame()
@@ -230,6 +229,22 @@ pdf(file = paste0("QuantificationMetrics.pdf"),
     height = 3)
 plot.counts | plot.error | plot.rmse
 dev.off()
+```
+
+```{r create_summary_df}
+df_summary <- df.RMSE %>% 
+              rename(val = rmse, tool=pipe) %>%
+              mutate(metrics = paste("Counts estimation"))
+
+df_summary_clean <- df_summary %>%
+  group_by(tool, metrics) %>%
+  summarise(val = 1/min(val))
+
+df_summary_clean
+```
+
+```{r save_metrics}
+write.csv(df_summary_clean, file = "Quantification_metrics.csv", row.names = F)
 ```
 
 ```{r sessioninfo}

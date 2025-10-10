@@ -6,6 +6,7 @@ params.outdir = "${projectDir}/output"
 process MatrixProcessing {
 
     input:
+    path scriptDir
     tuple path(shortReads), path(longReads), val(dataName), val(dataType)
 
     output:
@@ -15,7 +16,7 @@ process MatrixProcessing {
 
     script:
     """
-    cp -L $projectDir/bin/MatrixProcessing.Rmd MatrixProcessing.Rmd
+    cp -L $scriptDir/bin/MatrixProcessing.Rmd MatrixProcessing.Rmd
 
     Rscript -e "rmarkdown::render(
                     'MatrixProcessing.Rmd',
@@ -30,6 +31,7 @@ process MatrixProcessing {
 
 process CompareToShortReads {
     input:
+    path scriptDir
     tuple path(matrixRds), val(dataType)
 
     output:
@@ -37,9 +39,9 @@ process CompareToShortReads {
 
     script:
     """
-    cp -L $projectDir/bin/CompareToShortReads/1-processing.Rmd processing.Rmd
-    cp -L $projectDir/bin/imports/common_imports.R common_imports.R
-    cp -L $projectDir/bin/imports/QC.R QC.R
+    cp -L $scriptDir/bin/CompareToShortReads/1-processing.Rmd processing.Rmd
+    cp -L $scriptDir/bin/imports/common_imports.R common_imports.R
+    cp -L $scriptDir/bin/imports/QC.R QC.R
 
     Rscript -e "rmarkdown::render(
                     'processing.Rmd',
@@ -54,6 +56,7 @@ process VisualizeQC {
     //cache false
 
     input:
+    path scriptDir
     path files
 
     output:
@@ -65,9 +68,9 @@ process VisualizeQC {
 
     script:
     """
-    cp -L $projectDir/bin/CompareToShortReads/2-visualization.Rmd visualization.Rmd
-    cp -L $projectDir/bin/imports/common_imports.R common_imports.R
-    cp -L $projectDir/bin/imports/QC.R QC.R
+    cp -L $scriptDir/bin/CompareToShortReads/2-visualization.Rmd visualization.Rmd
+    cp -L $scriptDir/bin/imports/common_imports.R common_imports.R
+    cp -L $scriptDir/bin/imports/QC.R QC.R
 
     Rscript -e "rmarkdown::render(
                     'visualization.Rmd',
@@ -79,6 +82,7 @@ process VisualizeQC {
 
 process SingleCellMetrics {
     input:
+    path scriptDir
     tuple path(matrixRds), val(dataType)
 
     output:
@@ -86,13 +90,13 @@ process SingleCellMetrics {
 
     script:
     """
-    cp -L $projectDir/bin/singleCellMetrics/scProcessing.Rmd scProcessing.Rmd
-    cp -L $projectDir/bin/imports/common_imports.R common_imports.R
-    cp -L $projectDir/bin/imports/clustering.R clustering.R
-    cp -L $projectDir/bin/imports/cell_annot_custom.R cell_annot_custom.R
-    cp -L $projectDir/bin/imports/clusters_annot.R clusters_annot.R
-    cp -L $projectDir/bin/imports/cell_markers.rda cell_markers.rda
-    cp -L $projectDir/bin/imports/color_markers.rda color_markers.rda
+    cp -L $scriptDir/bin/singleCellMetrics/scProcessing.Rmd scProcessing.Rmd
+    cp -L $scriptDir/bin/imports/common_imports.R common_imports.R
+    cp -L $scriptDir/bin/imports/clustering.R clustering.R
+    cp -L $scriptDir/bin/imports/cell_annot_custom.R cell_annot_custom.R
+    cp -L $scriptDir/bin/imports/clusters_annot.R clusters_annot.R
+    cp -L $scriptDir/bin/imports/cell_markers.rda cell_markers.rda
+    cp -L $scriptDir/bin/imports/color_markers.rda color_markers.rda
 
     Rscript -e "rmarkdown::render(
                     'scProcessing.Rmd',
@@ -112,6 +116,7 @@ process ScMetricsVisualisation {
     //cache false
 
     input:
+    path scriptDir
     path files
 
     output:
@@ -122,11 +127,11 @@ process ScMetricsVisualisation {
 
     script:
     """
-    cp -L $projectDir/bin/singleCellMetrics/scVisualisation.Rmd scVisualisation.Rmd
-    cp -L $projectDir/bin/imports/common_imports.R common_imports.R
-    cp -L $projectDir/bin/imports/clustering.R clustering.R
-    cp -L $projectDir/bin/imports/cell_markers.rda cell_markers.rda
-    cp -L $projectDir/bin/imports/color_markers.rda color_markers.rda
+    cp -L $scriptDir/bin/singleCellMetrics/scVisualisation.Rmd scVisualisation.Rmd
+    cp -L $scriptDir/bin/imports/common_imports.R common_imports.R
+    cp -L $scriptDir/bin/imports/clustering.R clustering.R
+    cp -L $scriptDir/bin/imports/cell_markers.rda cell_markers.rda
+    cp -L $scriptDir/bin/imports/color_markers.rda color_markers.rda
 
     Rscript -e "rmarkdown::render(
                     'scVisualisation.Rmd',
@@ -140,6 +145,7 @@ process SpatialMetrics {
     publishDir "${params.outdir}/SpatialMetrics", mode: 'copy'
 
     input:
+    path scriptDir
     tuple path(matrixRds), val(dataType)
 
     output:
@@ -149,8 +155,8 @@ process SpatialMetrics {
 
     script:
     """
-    cp -L $projectDir/bin/spatialMetrics/spatial.Rmd spatial.Rmd
-    cp -L $projectDir/bin/imports/spatial.R spatial.R
+    cp -L $scriptDir/bin/spatialMetrics/spatial.Rmd spatial.Rmd
+    cp -L $scriptDir/bin/imports/spatial.R spatial.R
 
     Rscript -e "rmarkdown::render(
                     'spatial.Rmd',
@@ -160,7 +166,12 @@ process SpatialMetrics {
     """
 }
 
-workflow { 
+
+workflow CompareToShortReadswFW{ 
+    take:
+        scriptDir
+    main:
+
     Channel
         .fromPath(params.samplesheet)
         .splitCsv(header: true, strip: true)
@@ -172,23 +183,30 @@ workflow {
         }
         .set { samplesheetTuple }
 
-    MatrixProcessing(samplesheetTuple)
+    MatrixProcessing(scriptDir ,samplesheetTuple)
 
-    CompareToShortReads(MatrixProcessing.out.rds)
+    CompareToShortReads(scriptDir, MatrixProcessing.out.rds)
 
-    VisualizeQC(CompareToShortReads.out.collect())
+    VisualizeQC(scriptDir, CompareToShortReads.out.collect())
 
     MatrixProcessing.out.rds
         .filter { it[1].toLowerCase() == 'singlecell' }
         .set { singleCellRds }
 
-    SingleCellMetrics(singleCellRds)
+    SingleCellMetrics(scriptDir, singleCellRds)
 
-    ScMetricsVisualisation(SingleCellMetrics.out.collect())
+    ScMetricsVisualisation(scriptDir, SingleCellMetrics.out.collect())
 
     MatrixProcessing.out.rds
          .filter { it[1].toLowerCase() == 'spatial' }
          .set { spatialRds }
     
-    SpatialMetrics(spatialRds)
+    SpatialMetrics(scriptDir, spatialRds)
 }
+
+workflow {
+    scriptDir = Channel.fromPath("${projectDir}")
+    wfCTS = CompareToShortReadswFW(scriptDir)
+
+}
+

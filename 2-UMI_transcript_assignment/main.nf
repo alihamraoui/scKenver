@@ -1,7 +1,8 @@
 
-process dataPrep {
-    publishDir params.outdir, mode:'copy'
+process DataPrep {
+    //publishDir params.outdir, mode:'copy'
     input:
+    path scriptDir
     path corrected_data
     path raw_data
 
@@ -10,8 +11,8 @@ process dataPrep {
 
     script:
     """
-    cp -L $projectDir/bin/data_processing.Rmd data_processing.Rmd
-    cp -L $projectDir/bin/imports.r imports.r
+    cp -L $scriptDir/bin/data_processing.Rmd data_processing.Rmd
+    cp -L $scriptDir/bin/imports.r imports.r
 
     Rscript -e "rmarkdown::render('data_processing.Rmd',
                                     params=list(output_dir='.', 
@@ -21,20 +22,21 @@ process dataPrep {
     """
 }
 
-process transcriptMetrics {
-    publishDir params.outdir, mode:'copy'
+process TranscriptMetrics {
+    publishDir "${params.outdir}/2-UMI_transcript_assignment", mode:'copy'
     input:
+    path scriptDir
     file data
 
     output:
     file 'transcriptMetrics.html'
     file 'transcript_assignement.pdf'
-    file 'transcript_assignement.csv'
+    path 'transcript_assignment_metrics.csv', emit: transcript_metrics
 
     script:
     """
-    cp -L $projectDir/bin/transcript.Rmd transcriptMetrics.Rmd
-    cp -L $projectDir/bin/imports.r imports.r
+    cp -L $scriptDir/bin/transcript.Rmd transcriptMetrics.Rmd
+    cp -L $scriptDir/bin/imports.r imports.r
     
     Rscript -e "rmarkdown::render('transcriptMetrics.Rmd',
                                   params=list(data='$data',
@@ -43,19 +45,21 @@ process transcriptMetrics {
 }
 
 process UMIMetrics {
-    publishDir params.outdir, mode:'copy'
+    publishDir "${params.outdir}/2-UMI_transcript_assignment", mode:'copy'
     input:
+    path scriptDir
     file data
 
     output:
     file 'umiMetrics.html'
     file 'UMI_deduplication.pdf'
     file 'UMI_deduplication.pdf'
+    path 'UMI_correction_metrics.csv', emit: umi_metrics
 
     script:
     """
-    cp -L $projectDir/bin/umi.Rmd umiMetrics.Rmd
-    cp -L $projectDir/bin/imports.r imports.r
+    cp -L $scriptDir/bin/umi.Rmd umiMetrics.Rmd
+    cp -L $scriptDir/bin/imports.r imports.r
     
     Rscript -e "rmarkdown::render('umiMetrics.Rmd',
                                   params=list(data='$data',
@@ -63,11 +67,24 @@ process UMIMetrics {
     """
 }
 
-workflow { 
+workflow UMITranscriptAssignment{
+    take:
+        scriptDir
+    main:
     corrected_data = Channel.fromPath(params.data_corrected)
     raw_data =  Channel.fromPath(params.data_raw)
 
-    dataPrep(corrected_data, raw_data)
-    transcriptMetrics(dataPrep.out)
-    UMIMetrics(dataPrep.out)
+    DataPrep(scriptDir, corrected_data, raw_data)
+    TranscriptMetrics(scriptDir, DataPrep.out)
+    UMIMetrics(scriptDir, DataPrep.out)
+
+    emit:
+        umi_metrics = UMIMetrics.out.umi_metrics
+        transcript_metrics = TranscriptMetrics.out.transcript_metrics
+}
+
+workflow {
+    scriptDir = Channel.fromPath("${projectDir}")
+
+    UMITranscriptAssignment(scriptDir)
 }

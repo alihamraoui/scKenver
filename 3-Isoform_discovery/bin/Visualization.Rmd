@@ -1,6 +1,6 @@
 ---
 params:
-  files: ""
+  files: "../../test_data/3-Isoform_descovery/"
 title: "Benchmark single cell long-read"
 subtitle: "Isoform discovery metrics visualization"
 author: "Ali Hamraoui & Audrey Onfroy"
@@ -153,15 +153,15 @@ dev.off()
 ```
 
 ```{r create_summary_df}
-
 df_summary <- df %>%
                     dplyr::rename(metrics = Metric, val=value) %>%
-                    filter(accuracy == 'F1 score') %>% 
+                    filter(accuracy == "F1 score") %>%
+                    select(-accuracy) %>%
                     mutate(metrics="Transcript Discovery")
 df_summary
 ```
 
 ```{r save_summary_df}
-write.csv(df_summary, paste0("isoforms_discovery.csv"), row.names = F)
+write.csv(df_summary, paste0("Isoforms_discovery_metrics.csv"), row.names = F)
 ```
 

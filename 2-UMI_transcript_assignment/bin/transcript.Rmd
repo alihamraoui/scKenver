@@ -1,6 +1,6 @@
 ---
 params:
-  data: '/home/rstudio/markdowns/pip/PCR_data_R10/output/data_pcr_R10.rds' #'../PCR_data/output/data_pcr.rds'
+  data: '../test_data/data.rds' #'/home/rstudio/markdowns/pip/PCR_data_R10/output/data_pcr_R10.rds' #
   size: 500
   out: ''
 title: "Transcripts assignement metrics"
@@ -28,7 +28,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## R Markdown
 
 ```{r}
-library(dplyr)
+library(dplyr) 
 library(tidyr)
 library(foreach)
 library(doParallel)
@@ -152,11 +152,15 @@ dev.off()
 ```{r create_summary_df}
 prec_summarise_clean <- prec_summarise %>%
         dplyr::rename("val" = mean) %>%
+        filter(metrics == "F1") %>%
+        mutate(metrics="Transcript assignment") %>%
         dplyr::select(-sd)
+
+prec_summarise_clean
 ```
 
 ```{r save_summary_df}
-write.csv(prec_summarise_clean, paste0("transcript_assignement.csv"), row.names = F)
+write.csv(prec_summarise_clean, paste0("transcript_assignment_metrics.csv"), row.names = F)
 ```
 
 ```{r}

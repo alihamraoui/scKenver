@@ -1,0 +1,5 @@
+gtf,tool
+test_data/3-Isoform_descovery/Sockeye_transcriptome.gff,sockeye
+test_data/3-Isoform_descovery/FLAMES.annotated.filtered.gff3,flames
+test_data/3-Isoform_descovery/Bambu_novelTranscripts.gtf,bambu
+
