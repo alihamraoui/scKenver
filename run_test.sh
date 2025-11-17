@@ -13,12 +13,12 @@ if [ ! -x "$(command -v wget)" ]; then
 fi
 
 # Download dataset
-if [ ! -f "sub_pbmc_datasets.tar.gz" ]; then
+if [ ! -f "test_data.zip" ]; then
     wget https://zenodo.org/records/17432963/files/test_data.zip
 fi
 
 # Unzip dataset
-if [ ! -d "dataset" ]; then
+if [ ! -d "test_data" ]; then
     unzip test_data.zip
 fi
 
