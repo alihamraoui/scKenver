@@ -8,6 +8,8 @@ scRNA‑seq Long‑Read Methods Benchmark
 ## A systematic benchmark of scRNA-seq long-read bioinformatics methods
 [![Made with Docker](https://img.shields.io/badge/Made_with-Docker-blue?logo=docker&logoColor=white)](https://www.docker.com/ "Go to Docker homepage")
 ![Static Badge](https://img.shields.io/badge/Made%20with-Nextflow-green?style=flat&logoColor=black)
+[![testcase / tests](https://github.com/alihamraoui/scKenver/actions/workflows/testcase.yml/badge.svg)](https://github.com/alihamraoui/scKenver/actions/workflows/testcase.yml)
+
 ![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 ![Static Badge](https://img.shields.io/badge/BioRxiv%20DOI-10.1101%2F2025.07.21.665920-green?style=flat&logoColor=black&labelColor=black&color=red)
 
