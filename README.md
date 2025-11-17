@@ -115,7 +115,7 @@ Command:
 
 ```bash
 cd 1-CompareToShortReads
-nextflow run main.nf -profile docker   --samplesheet ../Matrix_samplesheet.csv   --outdir ../results_wf1
+nextflow run main.nf --samplesheet ../Matrix_samplesheet.csv   --outdir ../results_wf1
 ```
 
 Outputs:
@@ -132,7 +132,7 @@ Command:
 
 ```bash
 cd 2-UMI_transcript_assignment
-nextflow run main.nf -profile docker   --data_raw ../data_test/umi/raw   --data_corr ../data_test/umi/corrected   --size 100000   --outdir ../results_wf2
+nextflow run main.nf  --data_raw ../data_test/umi/raw   --data_corr ../data_test/umi/corrected   --size 100000   --outdir ../results_wf2
 ```
 
 Outputs:
@@ -149,7 +149,7 @@ Command:
 
 ```bash
 cd 3-Isoform_discovery
-nextflow run main.nf -profile docker   --samplesheet ../GTF_samplesheet.csv   --reference_gtf ../data_test/refs/gencode.gtf   --outdir ../results_wf3
+nextflow run main.nf --samplesheet ../GTF_samplesheet.csv   --reference_gtf ../data_test/refs/gencode.gtf   --outdir ../results_wf3
 ```
 
 Outputs:
@@ -167,7 +167,7 @@ Command:
 
 ```bash
 cd 4-Comparison_with_ground_truth
-nextflow run main.nf -profile docker   --results_roots ../results_wf1,../results_wf3   --truth ../data_test/truth   --outdir ../results_wf4
+nextflow run main.nf --results_roots ../results_wf1,../results_wf3   --truth ../data_test/truth   --outdir ../results_wf4
 ```
 
 Outputs:
@@ -245,7 +245,6 @@ Outputs:
 ## ✅ Reproducibility Best Practices
 
 - Always run using **fixed Git tag releases** (e.g., `v1.0`)
-- Prefer `-profile docker` for deterministic environments
 - Track Nextflow execution reports for provenance
 
 ---
