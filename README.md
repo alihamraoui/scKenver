@@ -58,7 +58,7 @@ A complete, zipped test dataset is available on Zenodo:
 Example download:
 
 ```bash
-wget -O scKenver_testdata.zip "https://zenodo.org/records/16098020/files/scKenver_testdata.zip?download=1"
+wget -O scKenver_testdata.zip "https://zenodo.org/records/17432963/files/test_data.zip?download=1"
 unzip scKenver_testdata.zip -d data_test
 ```
 
