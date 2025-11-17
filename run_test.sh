@@ -29,4 +29,4 @@ if [ ! -x "$(command -v nextflow)" ]; then
 fi
 
 echo "* Execute basic workflow"
-nextflow run main.nf --outdir results_global   -with-report -with-trace -with-timeline
+fasle #nextflow run main.nf --outdir results_global   -with-report -with-trace -with-timeline
