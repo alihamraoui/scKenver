@@ -55,12 +55,12 @@ scKenver/
 
 A complete, zipped test dataset is available on Zenodo:
 
-- **DOI:** `10.5281/zenodo.16098020`
+![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17632476.svg)
 
 Example download:
 
 ```bash
-wget -O scKenver_testdata.zip "https://zenodo.org/records/17432963/files/test_data.zip?download=1"
+wget -O scKenver_testdata.zip "https://zenodo.org/records/17632476/files/test_data.zip?download=1"
 unzip scKenver_testdata.zip -d data_test
 ```
 
@@ -257,10 +257,10 @@ If you use scKenver in your research, please cite:
 
 > Hamraoui A. et al.  
 > *A systematic benchmark of bioinformatics methods for single-cell and spatial RNA-seq Nanopore long-read data*  
-> BioRxiv, 2025. DOI: To be added upon publication.
+> BioRxiv, 2025. DOI: [doi.org/10.1101/2025.07.21.665920](https://doi.org/10.1101/2025.07.21.665920).
 
 Zenodo DOI for test data:
-> **10.5281/zenodo.16098020**
+> **10.5281/zenodo.17632476**
 
 ---
 
